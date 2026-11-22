@@ -103,10 +103,10 @@ The existing `main.py` still only runs its video-14 demo. This supports a first 
 Install a PyTorch build suitable for your CPU/CUDA environment and the matching torchvision build, then run:
 
 ```sh
-python train_convnext.py --device cuda --batch-size 8
+python train_convnext.py --device cuda --batch-size 8 --epochs 50
 ```
 
-The script downloads torchvision ImageNet weights on first use. Reduce `--batch-size` or `--image-size` if GPU memory is insufficient; use `--no-pretrained` to avoid downloading weights. Best checkpoints (`convnext_{tiny,small,base}_best.pth`), extracted-frame caches, and `validation_summary.json` are written under `Experiment_Results/ConvNeXt/`. Validation reports loss and detection precision, recall, F1, and mean IoU at a 0.5 IoU threshold. The validation split is for model selection and is not an independent test set.
+Each model now runs for exactly the requested `--epochs` (default: 30); there is no early stopping. The script still saves the best-validation-loss checkpoint for each model. It downloads torchvision ImageNet weights on first use. Reduce `--batch-size` or `--image-size` if GPU memory is insufficient; use `--no-pretrained` to avoid downloading weights. Best checkpoints (`convnext_{tiny,small,base}_best.pth`), extracted-frame caches, and `validation_summary.json` are written under `Experiment_Results/ConvNeXt/`. Validation reports loss and detection precision, recall, F1, and mean IoU at a 0.5 IoU threshold. The validation split is for model selection and is not an independent test set.
 
 ## Results
 ### 

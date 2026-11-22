@@ -402,28 +402,6 @@ def evaluate(
     }
 
 
-class EarlyStopping:
-    """Save the best weights and stop after validation loss stops improving."""
-
-    def __init__(self, patience: int, checkpoint_path: Path) -> None:
-        if patience < 1:
-            raise ValueError("--patience must be at least 1")
-        self.patience = patience
-        self.checkpoint_path = checkpoint_path
-        self.best_loss = float("inf")
-        self.bad_epochs = 0
-
-    def step(self, validation_loss: float, model: nn.Module) -> bool:
-        """Save a new best checkpoint; return True when patience is exhausted."""
-        if validation_loss < self.best_loss:
-            self.best_loss = validation_loss
-            self.bad_epochs = 0
-            torch.save(model.state_dict(), self.checkpoint_path)
-        else:
-            self.bad_epochs += 1
-        return self.bad_epochs >= self.patience
-
-
 def train_one_model(
     model_name: str,
     train_loader: DataLoader[tuple[Tensor, Tensor]],
@@ -442,7 +420,7 @@ def train_one_model(
     amp_enabled = device.type == "cuda"
     scaler = torch.amp.GradScaler("cuda", enabled=amp_enabled)
     checkpoint_path = args.output_dir / f"convnext_{model_name}_best.pth"
-    early_stopping = EarlyStopping(args.patience, checkpoint_path)
+    best_validation_loss = float("inf")
 
     for epoch in range(1, args.epochs + 1):
         model.train()
@@ -491,9 +469,9 @@ def train_one_model(
             validation[f"mean_iou{metric_suffix}"],
             optimizer.param_groups[0]["lr"],
         )
-        if early_stopping.step(validation["loss"], model):
-            LOGGER.info("Early stopping ConvNeXt-%s after epoch %d", model_name.title(), epoch)
-            break
+        if validation["loss"] < best_validation_loss:
+            best_validation_loss = validation["loss"]
+            torch.save(model.state_dict(), checkpoint_path)
 
     best_weights = torch.load(checkpoint_path, map_location=device, weights_only=True)
     model.load_state_dict(best_weights)
@@ -544,7 +522,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--image-size", type=int, default=224)
     parser.add_argument("--batch-size", type=int, default=8)
     parser.add_argument("--epochs", type=int, default=30)
-    parser.add_argument("--patience", type=int, default=5)
     parser.add_argument("--learning-rate", type=float, default=1e-4)
     parser.add_argument("--weight-decay", type=float, default=1e-4)
     parser.add_argument("--num-workers", type=int, default=4)
@@ -566,8 +543,8 @@ def main() -> None:
     args = parse_args()
     if args.frame_stride < 1 or args.image_size < 32 or args.batch_size < 1:
         raise ValueError("--frame-stride and --batch-size must be positive; --image-size must be at least 32")
-    if args.epochs < 1 or args.num_workers < 0 or args.patience < 1:
-        raise ValueError("--epochs and --patience must be positive; --num-workers cannot be negative")
+    if args.epochs < 1 or args.num_workers < 0:
+        raise ValueError("--epochs must be positive and --num-workers cannot be negative")
     if args.seed < 0:
         raise ValueError("--seed cannot be negative")
     if not 0.0 <= args.confidence_threshold <= 1.0 or not 0.0 <= args.iou_threshold <= 1.0:
